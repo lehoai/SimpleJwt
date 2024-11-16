@@ -13,7 +13,7 @@ This project is ideal for developers who need a simple way to manage JWTs in Jav
 **Generate JWT**
 ```java
 SimpleJwt.JwtBuilder jwtBuilder = new SimpleJwt.JwtBuilder();
-String jwt = jwtBuilder.generateJwt("myemail@gmail.com", "thisismyverylongkey");
+String jwt = jwtBuilder.generateJwt("myemail@gmail.com", "thisismyverylongkey", 1000); // time in seconds
 ```
 **Verify and get payload**
 ```java

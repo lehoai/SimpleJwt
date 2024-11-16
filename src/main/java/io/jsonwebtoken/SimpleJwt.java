@@ -4,19 +4,6 @@ import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import java.util.Base64;
 
-/**
- * SimpleJwt is a lightweight class for creating and verifying JSON Web Tokens (JWT) without using the
- * complex JJWT library. It focuses on simplicity and supports only the popular HS256 (HMAC-SHA256) algorithm.
- *
- * <p>This class allows you to generate JWT tokens by encoding a header and payload, and signing with a
- * secret key using the HS256 algorithm. Additionally, it provides methods for basic verification of tokens.</p>
- *
- * <p><b>Note:</b> This implementation only supports symmetric signing with a shared secret key and does
- * not include support for other algorithms or key management. For more complex needs, consider using a
- * comprehensive JWT library like JJWT.</p>
- * <p>
- * Dependencies: None
- */
 public class SimpleJwt {
 
     /**
@@ -71,23 +58,29 @@ public class SimpleJwt {
             this.payloadConverter = payloadConverter;
         }
 
-        public String generateJwt(Object payload, String key) throws Exception {
+        public String generateJwt(Object payload, String key, long expire) {
             // generate header
             String encodedHeader = base64UrlEncode(headerJson.getBytes());
 
             // generate payload
             String payloadStr = this.payloadConverter.convertToStr(payload);
+            // exp claim
+            long currentTimeInSeconds = System.currentTimeMillis() / 1000 + expire;
+            payloadStr += "|||" + currentTimeInSeconds;
+
             String encodedPayload = base64UrlEncode(payloadStr.getBytes());
 
             // generate message
             String message = encodedHeader + "." + encodedPayload;
 
             // generate signature
-            String signature = createHmacSignature(message, key);
-
-            return message + "." + signature;
+            try {
+                String signature = createHmacSignature(message, key);
+                return message + "." + signature;
+            } catch (Exception e) {
+                return "";
+            }
         }
-
 
         @Override
         public String convertToStr(Object payload) {
@@ -114,7 +107,7 @@ public class SimpleJwt {
         /**
          * verify jwt token
          */
-        public boolean verifyToken(String token, String key) throws Exception {
+        public boolean verifyToken(String token, String key) {
 
             String[] parts = token.split("\\.");
             if (parts.length != 3) {
@@ -124,14 +117,29 @@ public class SimpleJwt {
             String signature = parts[2];
 
             // Recreate the signature using the provided secret key
-            String expectedSignature = createHmacSignature(headerAndPayload, key);
+            String expectedSignature;
+            try {
+                expectedSignature = createHmacSignature(headerAndPayload, key);
+            } catch (Exception e) {
+                return false;
+            }
 
             // Compare the provided signature with the expected signature
+            if (!signature.equals(expectedSignature)) {
+                return false;
+            }
 
-            return signature.equals(expectedSignature);
+            // check exp
+            String encodedPayload = parts[1];
+            byte[] decodedBytes = Base64.getUrlDecoder().decode(encodedPayload);
+            String payloadStr = new String(decodedBytes);
+            String expStr = payloadStr.substring(payloadStr.indexOf("|||") + 3);
+            long exp = Long.parseLong(expStr);
+            long currentTime = System.currentTimeMillis() / 1000;
+            return currentTime < exp; // Token has expired
         }
 
-        public Object getPayload(String token) throws Exception {
+        public Object getPayload(String token) {
             String[] parts = token.split("\\.");
             if (parts.length != 3) {
                 throw new IllegalArgumentException("Invalid JWT token format.");
@@ -139,6 +147,7 @@ public class SimpleJwt {
             String encodedPayload = parts[1];
             byte[] decodedBytes = Base64.getUrlDecoder().decode(encodedPayload);
             String payloadStr = new String(decodedBytes);
+            payloadStr = payloadStr.substring(0, payloadStr.indexOf("|||"));
 
             return strToPayloadConverter.convertToPayload(payloadStr);
         }
